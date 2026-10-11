@@ -149,6 +149,26 @@ def get_chart_title(item: dict) -> str:
     return item.get("report_title", "")
 
 
+def highlight_text(snippet: str, query: str) -> str:
+    """검색 키워드 및 동의어 노란색 하이라이팅 HTML 태그 적용"""
+    if not snippet:
+        return ""
+    import html
+    escaped = html.escape(snippet)
+    terms = [w.strip() for w in query.split() if len(w.strip()) > 0]
+    try:
+        s = get_searcher()
+        terms = s.expand_query_terms(query)
+    except Exception:
+        pass
+
+    for w in sorted(set(terms), key=len, reverse=True):
+        if len(w) >= 2:
+            esc_w = html.escape(w)
+            escaped = escaped.replace(esc_w, f'<span style="background-color:#FEFCBF; font-weight:bold; color:#744210; padding:1px 3px; border-radius:3px;">{esc_w}</span>')
+    return escaped
+
+
 # 고해상도 이미지 라이트박스 팝업 (Streamlit Dialog)
 @st.dialog("📊 차트 상세 보기", width="large")
 def show_image_modal(item: dict):
