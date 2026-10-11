@@ -118,11 +118,32 @@ def get_searcher():
     return JejuMultimodalSearcher()
 
 
+def resolve_image_path(item: dict) -> str:
+    """Windows 로컬 및 Linux(Streamlit Cloud) 환경 모두에서 이미지 경로 동적 해결"""
+    img_name = item.get("image_filename")
+    if not img_name and item.get("image_path"):
+        img_name = os.path.basename(item["image_path"])
+
+    if img_name:
+        candidate = os.path.join(DATA_DIR, "images", img_name)
+        if os.path.exists(candidate):
+            return candidate
+        alt_candidate = os.path.join(CURRENT_DIR, "data", "images", img_name)
+        if os.path.exists(alt_candidate):
+            return alt_candidate
+
+    raw_path = item.get("image_path")
+    if raw_path and os.path.exists(raw_path):
+        return raw_path
+
+    return None
+
+
 # 고해상도 이미지 라이트박스 팝업 (Streamlit Dialog)
 @st.dialog("📊 차트 상세 보기", width="large")
 def show_image_modal(item: dict):
-    img_path = item.get("image_path")
-    if img_path and os.path.exists(img_path):
+    img_path = resolve_image_path(item)
+    if img_path:
         st.image(img_path, use_container_width=True)
 
     st.markdown(f"### {item.get('report_title')}")
@@ -346,8 +367,8 @@ def main():
     for idx, item in enumerate(items_to_display):
         col = cols[idx % grid_cols]
         with col:
-            img_path = item.get("image_path")
-            if img_path and os.path.exists(img_path):
+            img_path = resolve_image_path(item)
+            if img_path:
                 # 썸네일 표시
                 st.image(img_path, use_container_width=True)
 
