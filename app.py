@@ -139,6 +139,16 @@ def resolve_image_path(item: dict) -> str:
     return None
 
 
+def get_chart_title(item: dict) -> str:
+    """페이지 텍스트에서 실제 차트 세부 제목([국내관광객] 비교 차트 등) 추출"""
+    text = item.get("full_text") or item.get("text") or item.get("snippet") or ""
+    for line in text.split("\n"):
+        line = line.strip()
+        if "[" in line and "]" in line and len(line) > 5 and not line.startswith("※"):
+            return line
+    return item.get("report_title", "")
+
+
 # 고해상도 이미지 라이트박스 팝업 (Streamlit Dialog)
 @st.dialog("📊 차트 상세 보기", width="large")
 def show_image_modal(item: dict):
@@ -376,13 +386,24 @@ def main():
             if "final_score" in item:
                 score_html = f"<span class='score-chip'>일치율 {int(item['final_score'] * 100)}%</span>"
 
+            chart_heading = get_chart_title(item)
+            snippet_preview = item.get("snippet", "")
+            if len(snippet_preview) > 75:
+                snippet_preview = snippet_preview[:75] + "..."
+
             st.markdown(
                 f"""
                 <div class="card-meta">
-                    <div class="card-title">{item.get('report_title', '')}</div>
+                    <div class="card-title" title="{chart_heading}">{chart_heading}</div>
+                    <div style="font-size:0.75rem; color:#718096; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        출처: {item.get('report_title', '')}
+                    </div>
                     <div class="card-sub">
                         <span>{item.get('report_date', '')} (p.{item.get('page_number', 1)})</span>
                         {score_html}
+                    </div>
+                    <div style="font-size:0.78rem; color:#4A5568; background:#EDF2F7; border-radius:6px; padding:5px 8px; margin-top:6px; line-height:1.35;">
+                        🔍 <b>언급 내용:</b> {highlight_text(snippet_preview, query)}
                     </div>
                 </div>
                 """,
