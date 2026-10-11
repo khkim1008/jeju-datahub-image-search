@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+.vscode/
+.idea/
+*.log
+
+# 원본 대용량 PDF는 클라우드 다운로드 링크로 직결되므로 제외하여 레포지토리 경량화
+data/reports/*.pdf
