@@ -169,6 +169,22 @@ def highlight_text(snippet: str, query: str) -> str:
     return escaped
 
 
+def get_match_reason(item: dict, query: str) -> str:
+    """차트와 검색어가 일치하게 된 구체적인 이유 설명 생성"""
+    matched = item.get("matched_term", "")
+    score_pct = int(item.get("final_score", 0.0) * 100)
+    q = query.strip()
+    if matched:
+        if matched.lower() in q.lower() or q.lower() in matched.lower():
+            return f"차트 항목 및 분석 내용에 '{matched}' 키워드가 직접 수록되어 {score_pct}% 일치"
+        else:
+            return f"검색어 '{q}'의 통계 업종명인 '{matched}' 차트 항목과 매칭되어 {score_pct}% 일치"
+    elif item.get("keyword_score", 0) > 0:
+        return f"차트 본문 텍스트 내 키워드 문맥 일치 ({score_pct}%)"
+    else:
+        return f"차트 시각 구조 및 소비 빅데이터 패턴 유사도 판정 ({score_pct}%)"
+
+
 # 고해상도 이미지 라이트박스 팝업 (Streamlit Dialog)
 @st.dialog("📊 차트 상세 보기", width="large")
 def show_image_modal(item: dict):
@@ -286,59 +302,10 @@ def main():
     query = st.text_input(
         "검색어 입력",
         value=default_query,
-        placeholder="검색할 키워드를 입력하세요 (예: 렌터카, 외식, 골프장, 숙박, 카페 ...)",
+        placeholder="검색할 키워드를 입력하고 엔터(Enter)를 누르세요 (예: 렌터카, 외식, 골프장, 숙박, 면세점 ...)",
         label_visibility="collapsed"
     )
-
-    # 🎛️ 실시간 일치율 슬라이더 제어 바 (메인 화면)
-    with st.container():
-        st.markdown("""
-        <div style="background:#F7FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:14px 18px; margin: 10px 0 20px 0;">
-        """, unsafe_allow_html=True)
-
-        ctrl_col1, ctrl_col2 = st.columns([1, 2])
-        with ctrl_col1:
-            filter_mode = st.radio(
-                "🎯 일치율 필터 방식",
-                ["일치율 이상 (≥)", "일치율 미만 (<)", "구간 지정 (Min~Max)"],
-                index=0,
-                horizontal=False,
-                help="슬라이드바를 이동하여 원하는 일치율 기준의 이미지를 실시간으로 탐색할 수 있습니다."
-            )
-
-        with ctrl_col2:
-            if filter_mode == "일치율 이상 (≥)":
-                threshold = st.slider(
-                    "최소 일치율 기준 (%)",
-                    min_value=0,
-                    max_value=100,
-                    value=50,
-                    step=5,
-                    help="설정한 퍼센트 이상인 고일치율 차트들만 엄선하여 표시합니다."
-                )
-                min_sim, max_sim = threshold, 100
-            elif filter_mode == "일치율 미만 (<)":
-                threshold = st.slider(
-                    "일치율 상한 기준 (%)",
-                    min_value=5,
-                    max_value=100,
-                    value=50,
-                    step=5,
-                    help="설정한 퍼센트 미만으로 걸러진 저유사도 차트들을 살펴봅니다."
-                )
-                min_sim, max_sim = 0, threshold
-            else:  # 구간 지정
-                sim_range = st.slider(
-                    "일치율 검색 범위 (%)",
-                    min_value=0,
-                    max_value=100,
-                    value=(30, 80),
-                    step=5,
-                    help="선택한 최소~최대 퍼센트 구간 내의 차트들만 탐색합니다."
-                )
-                min_sim, max_sim = sim_range
-
-        st.markdown("</div>", unsafe_allow_html=True)
+    st.caption("⌨️ 검색어를 입력하고 **엔터(Enter)**를 누르면 관련 이미지가 바로 아래에 즉시 나타납니다.")
 
     # 데이터 로드: 검색어 유무에 따른 분기
     if query.strip():
@@ -346,42 +313,38 @@ def main():
         with st.spinner(f"'{query}' 관련 차트 이미지를 탐색 중..."):
             res = searcher.search(query=query.strip(), top_k=top_k, alpha=alpha)
             raw_items = res.get("image_results", [])
-
-            # 슬라이더 조건에 따른 필터링
-            if filter_mode == "일치율 미만 (<)":
-                items_to_display = [
-                    it for it in raw_items
-                    if (it.get("final_score", 0.0) * 100) < max_sim
-                ]
-            else:
-                items_to_display = [
-                    it for it in raw_items
-                    if min_sim <= (it.get("final_score", 0.0) * 100) <= max_sim
-                ]
-
-            # 통계 요약 (50% 이상 / 미만 개수)
             above_50 = sum(1 for it in raw_items if (it.get("final_score", 0.0) * 100) >= 50)
             below_50 = len(raw_items) - above_50
             top_score = max((it.get("final_score", 0.0) * 100 for it in raw_items), default=0)
 
-        # 상태 및 통계 헤더 표시
-        st.markdown(
-            f"""
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <div style="font-size:1.15rem; font-weight:700; color:#1A365D;">
-                    🔍 <b>'{query}'</b> 검색 결과 ({len(items_to_display)}장 매칭)
-                </div>
-                <div style="font-size:0.85rem; color:#4A5568;">
-                    필터 조건: <b>{min_sim}% ~ {max_sim}%</b> | 50% 이상: <b style="color:#2B6CB0;">{above_50}장</b> | 50% 미만: <b style="color:#C53030;">{below_50}장</b> | 최고 일치율: <b>{top_score:.1f}%</b>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        # 🎛️ 컴팩트 인라인 컨트롤 바 (검색창 바로 밑에 1줄로 배치하여 이미지가 즉시 노출)
+        bar_col1, bar_col2, bar_col3 = st.columns([1.5, 1.2, 0.8])
+        with bar_col1:
+            st.markdown(f"#### 🔍 **'{query}'** 검색 결과")
+            st.caption(f"최고 일치율: **{top_score:.1f}%** | 50% 이상: **{above_50}장** | 50% 미만: **{below_50}장**")
+        with bar_col2:
+            min_sim = st.slider(
+                "최소 일치율 필터 (%)",
+                min_value=0,
+                max_value=100,
+                value=50,
+                step=5,
+                help="슬라이더를 좌우로 움직이면 해당 퍼센트 이상의 이미지가 실시간 반영됩니다."
+            )
+        with bar_col3:
+            st.write("") # 수직 정렬 공백
+            show_below_50 = st.checkbox("50% 미만 보기", value=False, help="체크하면 50% 미만으로 제외된 저유사도 차트들을 확인합니다.")
+
+        # 필터링 적용
+        if show_below_50:
+            items_to_display = [it for it in raw_items if (it.get("final_score", 0.0) * 100) < 50]
+            st.info(f"📋 일치율 50% 미만으로 제외된 차트 목록입니다 ({len(items_to_display)}장).")
+        else:
+            items_to_display = [it for it in raw_items if (it.get("final_score", 0.0) * 100) >= min_sim]
 
         if not items_to_display:
-            st.warning(f"🔍 현재 설정된 일치율 범위(<b>{min_sim}% ~ {max_sim}%</b>)에 해당하는 차트 이미지가 없습니다.", icon="⚠️")
-            st.info("💡 위의 슬라이드바 핸들을 좌우로 이동하거나, 다른 필터 모드를 선택해 보세요.")
+            st.warning(f"🔍 현재 일치율 기준(<b>{min_sim}% 이상</b>)에 해당하는 차트 이미지가 없습니다.", icon="⚠️")
+            st.info("💡 위의 슬라이더 핸들을 왼쪽으로 내려 기준을 낮추거나, '50% 미만 보기'를 체크해 보세요.")
             return
     else:
         # 검색어가 없을 때는 최신 주요 차트 피드 표시
@@ -411,6 +374,8 @@ def main():
             if len(snippet_preview) > 75:
                 snippet_preview = snippet_preview[:75] + "..."
 
+            match_reason_text = get_match_reason(item, query) if query.strip() else "최신 정기 리포트 주요 시각화 차트"
+
             st.markdown(
                 f"""
                 <div class="card-meta">
@@ -422,8 +387,11 @@ def main():
                         <span>{item.get('report_date', '')} (p.{item.get('page_number', 1)})</span>
                         {score_html}
                     </div>
-                    <div style="font-size:0.78rem; color:#4A5568; background:#EDF2F7; border-radius:6px; padding:5px 8px; margin-top:6px; line-height:1.35;">
-                        🔍 <b>언급 내용:</b> {highlight_text(snippet_preview, query)}
+                    <div style="font-size:0.78rem; color:#2B6CB0; background:#EBF8FF; border-left:3px solid #3182CE; border-radius:4px; padding:6px 8px; margin-top:6px; line-height:1.4;">
+                        💡 <b>일치 이유:</b> {match_reason_text}
+                    </div>
+                    <div style="font-size:0.76rem; color:#4A5568; background:#F7FAFC; border:1px solid #E2E8F0; border-radius:4px; padding:5px 8px; margin-top:5px; line-height:1.35;">
+                        📝 <b>본문 언급:</b> {highlight_text(snippet_preview, query)}
                     </div>
                 </div>
                 """,

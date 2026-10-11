@@ -273,6 +273,7 @@ class JejuMultimodalSearcher:
                 "pdf_filename": p["pdf_filename"],
                 "file_info_id": p["file_info_id"],
                 "file_id": p["file_id"],
+                "matched_term": matched_terms[idx],
                 "snippet": self.extract_snippet(p.get("text", ""), query)
             })
 
